@@ -7,17 +7,16 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  ACR_NAME: 'LanceOACR'  # Your Azure Container Registry name
+  ACR_NAME: 'lanceoacr'  # Your Azure Container Registry name (lowercase)
   AKS_CLUSTER: 'aks-cluster'
   RESOURCE_GROUP: 'k8s-resource-group'
   IMAGE_NAME: 'my-app'
 
 steps:
-  - task: Docker@2
-    displayName: 'Login to ACR'
-    inputs:
-      command: login
-      containerRegistry: $(ACR_NAME).azurecr.io
+  - script: |
+      az login --identity || az login --use-device-code
+      az acr login --name $(ACR_NAME)
+    displayName: 'Authenticate to Azure and ACR'
 
   - script: |
       docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(Build.BuildId) .
