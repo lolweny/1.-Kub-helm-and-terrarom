@@ -4,23 +4,32 @@ trigger:
       - main  # Runs the pipeline on every push to main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: 'Default'  # Ensures the pipeline runs on your self-hosted agent
 
 variables:
-  ACR_NAME: 'lanceoacr'  # Your Azure Container Registry name (lowercase)
+  ACR_NAME: 'lanceoacr'  # Your Azure Container Registry name (must be lowercase)
   AKS_CLUSTER: 'aks-cluster'
   RESOURCE_GROUP: 'k8s-resource-group'
   IMAGE_NAME: 'my-app'
+  IMAGE_TAG: '$(Build.BuildId)'  # Unique tag for Docker images
 
 steps:
+  - checkout: self  # Ensures the latest code is checked out
+
   - script: |
-      az login --identity || az login --use-device-code
+      set -e  # Stops execution if any command fails
+      echo "🔐 Logging into Azure..."
+      az login --service-principal -u $(AZURE_CLIENT_ID) -p $(AZURE_CLIENT_SECRET) --tenant $(AZURE_TENANT_ID)
+      echo "🔐 Logging into Azure Container Registry..."
       az acr login --name $(ACR_NAME)
     displayName: 'Authenticate to Azure and ACR'
 
   - script: |
-      docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(Build.BuildId) .
-      docker push $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(Build.BuildId)
+      set -e
+      echo "🐳 Building Docker image..."
+      docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG) .
+      echo "🚀 Pushing Docker image to ACR..."
+      docker push $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
     displayName: 'Build & Push Docker Image'
 
   - task: HelmInstaller@1
@@ -28,7 +37,12 @@ steps:
       helmVersionToInstall: 'latest'
 
   - script: |
+      set -e
+      echo "🔑 Getting AKS credentials..."
       az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER)
-      helm upgrade --install my-app ./my-app --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) --set image.tag=$(Build.BuildId)
+      echo "🚢 Deploying to AKS with Helm..."
+      helm upgrade --install my-app ./my-app \
+        --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) \
+        --set image.tag=$(IMAGE_TAG)
     displayName: 'Deploy to AKS'
 
