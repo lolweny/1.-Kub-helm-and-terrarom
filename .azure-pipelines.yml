@@ -4,45 +4,59 @@ trigger:
       - main  # Runs the pipeline on every push to main
 
 pool:
-  name: 'Default'  # Ensures the pipeline runs on your self-hosted agent
+  name: 'Default'  # Use self-hosted agent pool
 
 variables:
-  ACR_NAME: 'lanceoacr'  # Your Azure Container Registry name (must be lowercase)
+  ACR_NAME: 'lanceoacr'  # Azure Container Registry name (lowercase)
   AKS_CLUSTER: 'aks-cluster'
   RESOURCE_GROUP: 'k8s-resource-group'
   IMAGE_NAME: 'my-app'
-  IMAGE_TAG: '$(Build.BuildId)'  # Unique tag for Docker images
+  IMAGE_TAG: '$(Build.BuildId)'  # Unique image tag
 
 steps:
   - checkout: self  # Ensures the latest code is checked out
 
   - script: |
-      set -e  # Stops execution if any command fails
-      echo "🔐 Logging into Azure..."
+      $ErrorActionPreference = "Stop"
+      Write-Host "🔍 Checking if Azure CLI is installed..."
+      if (-Not (Get-Command az -ErrorAction SilentlyContinue)) {
+          Write-Host "⚠️ Azure CLI not found! Installing..."
+          Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile AzureCLI.msi
+          Start-Process msiexec.exe -ArgumentList '/I AzureCLI.msi /quiet /norestart' -NoNewWindow -Wait
+      }
+      
+      Write-Host "🔐 Logging into Azure..."
       az login --service-principal -u $(AZURE_CLIENT_ID) -p $(AZURE_CLIENT_SECRET) --tenant $(AZURE_TENANT_ID)
-      echo "🔐 Logging into Azure Container Registry..."
+      
+      Write-Host "🔐 Logging into Azure Container Registry..."
       az acr login --name $(ACR_NAME)
     displayName: 'Authenticate to Azure and ACR'
+    shell: pwsh  # Run on PowerShell
 
   - script: |
-      set -e
-      echo "🐳 Building Docker image..."
+      $ErrorActionPreference = "Stop"
+      Write-Host "🐳 Building Docker image..."
       docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG) .
-      echo "🚀 Pushing Docker image to ACR..."
+      
+      Write-Host "🚀 Pushing Docker image to ACR..."
       docker push $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
     displayName: 'Build & Push Docker Image'
+    shell: pwsh
 
   - task: HelmInstaller@1
     inputs:
       helmVersionToInstall: 'latest'
 
   - script: |
-      set -e
-      echo "🔑 Getting AKS credentials..."
-      az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER)
-      echo "🚢 Deploying to AKS with Helm..."
-      helm upgrade --install my-app ./my-app \
-        --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) \
-        --set image.tag=$(IMAGE_TAG)
+      $ErrorActionPreference = "Stop"
+      Write-Host "🔑 Getting AKS credentials..."
+      az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER) --overwrite-existing
+      
+      Write-Host "🚢 Deploying to AKS with Helm..."
+      helm upgrade --install my-app ./my-app `
+        --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) `
+        --set image.tag=$(IMAGE_TAG) `
+        --wait
     displayName: 'Deploy to AKS'
+    shell: pwsh
 
