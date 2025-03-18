@@ -22,9 +22,22 @@ steps:
       targetType: 'inline'
       script: |
         Write-Host "🔐 Logging into Azure..."
-        az login --service-principal -u $(AZURE_CLIENT_ID) -p $(AZURE_CLIENT_SECRET) --tenant $(AZURE_TENANT_ID)
+        try {
+          az login --service-principal -u $(AZURE_CLIENT_ID) -p $(AZURE_CLIENT_SECRET) --tenant $(AZURE_TENANT_ID)
+          Write-Host "✅ Successfully authenticated to Azure."
+        } catch {
+          Write-Host "❌ Failed to authenticate to Azure. Exiting..."
+          exit 1
+        }
+
         Write-Host "🔐 Logging into Azure Container Registry..."
-        az acr login --name $(ACR_NAME)
+        try {
+          az acr login --name $(ACR_NAME)
+          Write-Host "✅ Successfully authenticated to ACR."
+        } catch {
+          Write-Host "❌ Failed to authenticate to ACR. Exiting..."
+          exit 1
+        }
 
   - task: PowerShell@2
     displayName: 'Build & Push Docker Image'
@@ -32,9 +45,22 @@ steps:
       targetType: 'inline'
       script: |
         Write-Host "🐳 Building Docker image..."
-        docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG) .
+        try {
+          docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG) .
+          Write-Host "✅ Docker image built successfully."
+        } catch {
+          Write-Host "❌ Failed to build Docker image. Exiting..."
+          exit 1
+        }
+
         Write-Host "🚀 Pushing Docker image to ACR..."
-        docker push $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
+        try {
+          docker push $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
+          Write-Host "✅ Docker image pushed successfully."
+        } catch {
+          Write-Host "❌ Failed to push Docker image. Exiting..."
+          exit 1
+        }
 
   - task: HelmInstaller@1
     displayName: 'Install Helm'
@@ -47,9 +73,22 @@ steps:
       targetType: 'inline'
       script: |
         Write-Host "🔑 Getting AKS credentials..."
-        az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER)
+        try {
+          az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER)
+          Write-Host "✅ Successfully retrieved AKS credentials."
+        } catch {
+          Write-Host "❌ Failed to retrieve AKS credentials. Exiting..."
+          exit 1
+        }
+
         Write-Host "🚢 Deploying to AKS with Helm..."
-        helm upgrade --install my-app ./my-app `
-          --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) `
-          --set image.tag=$(IMAGE_TAG)
+        try {
+          helm upgrade --install my-app ./my-app `
+            --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) `
+            --set image.tag=$(IMAGE_TAG)
+          Write-Host "✅ Successfully deployed to AKS."
+        } catch {
+          Write-Host "❌ Failed to deploy to AKS. Exiting..."
+          exit 1
+        }
 
