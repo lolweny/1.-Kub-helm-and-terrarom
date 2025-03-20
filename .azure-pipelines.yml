@@ -17,14 +17,14 @@ steps:
   - checkout: self  # Ensures the latest code is checked out
 
   - task: PowerShell@2
-    displayName: 'Authenticate to Azure and ACR'
+    displayName: 'Authenticate to Azure and ACR using Managed Identity'
     inputs:
       targetType: 'inline'
       script: |
-        Write-Host "🔐 Logging into Azure..."
+        Write-Host "🔐 Logging into Azure using Managed Identity..."
         try {
-          az login --service-principal -u $(AZURE_CLIENT_ID) -p $(AZURE_CLIENT_SECRET) --tenant $(AZURE_TENANT_ID)
-          Write-Host "✅ Successfully authenticated to Azure."
+          az login --identity
+          Write-Host "✅ Successfully authenticated to Azure using Managed Identity."
         } catch {
           Write-Host "❌ Failed to authenticate to Azure. Exiting..."
           exit 1
@@ -32,7 +32,7 @@ steps:
 
         Write-Host "🔐 Logging into Azure Container Registry..."
         try {
-          az acr login --name $(ACR_NAME)
+          az acr login --name $(ACR_NAME) --identity
           Write-Host "✅ Successfully authenticated to ACR."
         } catch {
           Write-Host "❌ Failed to authenticate to ACR. Exiting..."
@@ -74,7 +74,7 @@ steps:
       script: |
         Write-Host "🔑 Getting AKS credentials..."
         try {
-          az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER)
+          az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER) --identity
           Write-Host "✅ Successfully retrieved AKS credentials."
         } catch {
           Write-Host "❌ Failed to retrieve AKS credentials. Exiting..."
