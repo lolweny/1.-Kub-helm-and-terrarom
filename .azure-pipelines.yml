@@ -1,41 +1,41 @@
 trigger:
   branches:
     include:
-      - main  # Runs the pipeline on every push to main
+      - main
 
 pool:
-  name: 'Default'  # Use your self-hosted agent pool
+  name: 'Default'  # Your self-hosted or Microsoft-hosted agent
 
 variables:
-  ACR_NAME: 'lanceoacr'  # Azure Container Registry name (must be lowercase)
+  ACR_NAME: 'lanceoacr'
   AKS_CLUSTER: 'aks-cluster'
   RESOURCE_GROUP: 'k8s-resource-group'
   IMAGE_NAME: 'my-app'
-  IMAGE_TAG: '$(Build.BuildId)'  # Unique tag for Docker images
+  IMAGE_TAG: '$(Build.BuildId)'
 
 steps:
-  - checkout: self  # Ensures the latest code is checked out
+  - checkout: self
 
   - task: PowerShell@2
-    displayName: 'Authenticate to Azure and ACR using Managed Identity'
+    displayName: 'Authenticate to Azure + ACR'
     inputs:
       targetType: 'inline'
       script: |
-        Write-Host "🔐 Logging into Azure using Managed Identity..."
+        Write-Host "🔐 Logging into Azure using System-Assigned Identity..."
         try {
-          az login --identity
-          Write-Host "✅ Successfully authenticated to Azure using Managed Identity."
+          az login --identity --username 25a98eeb-6aec-406f-95e5-f3710e7d5cda
+          Write-Host "✅ Logged into Azure."
         } catch {
-          Write-Host "❌ Failed to authenticate to Azure. Exiting..."
+          Write-Host "❌ Azure login failed"
           exit 1
         }
 
         Write-Host "🔐 Logging into Azure Container Registry..."
         try {
-          az acr login --name $(ACR_NAME) --identity
-          Write-Host "✅ Successfully authenticated to ACR."
+          az acr login --name $(ACR_NAME)
+          Write-Host "✅ Logged into ACR."
         } catch {
-          Write-Host "❌ Failed to authenticate to ACR. Exiting..."
+          Write-Host "❌ ACR login failed"
           exit 1
         }
 
@@ -45,22 +45,10 @@ steps:
       targetType: 'inline'
       script: |
         Write-Host "🐳 Building Docker image..."
-        try {
-          docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG) .
-          Write-Host "✅ Docker image built successfully."
-        } catch {
-          Write-Host "❌ Failed to build Docker image. Exiting..."
-          exit 1
-        }
+        docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG) .
 
         Write-Host "🚀 Pushing Docker image to ACR..."
-        try {
-          docker push $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
-          Write-Host "✅ Docker image pushed successfully."
-        } catch {
-          Write-Host "❌ Failed to push Docker image. Exiting..."
-          exit 1
-        }
+        docker push $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
 
   - task: HelmInstaller@1
     displayName: 'Install Helm'
@@ -68,27 +56,15 @@ steps:
       helmVersionToInstall: 'latest'
 
   - task: PowerShell@2
-    displayName: 'Deploy to AKS'
+    displayName: 'Deploy to AKS via Helm'
     inputs:
       targetType: 'inline'
       script: |
-        Write-Host "🔑 Getting AKS credentials..."
-        try {
-          az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER) --identity
-          Write-Host "✅ Successfully retrieved AKS credentials."
-        } catch {
-          Write-Host "❌ Failed to retrieve AKS credentials. Exiting..."
-          exit 1
-        }
+        Write-Host "🔑 Fetching AKS credentials..."
+        az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER)
 
-        Write-Host "🚢 Deploying to AKS with Helm..."
-        try {
-          helm upgrade --install my-app ./my-app `
-            --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) `
-            --set image.tag=$(IMAGE_TAG)
-          Write-Host "✅ Successfully deployed to AKS."
-        } catch {
-          Write-Host "❌ Failed to deploy to AKS. Exiting..."
-          exit 1
-        }
+        Write-Host "🚢 Deploying Helm chart..."
+        helm upgrade --install my-app ./my-app `
+          --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) `
+          --set image.tag=$(IMAGE_TAG)
 
