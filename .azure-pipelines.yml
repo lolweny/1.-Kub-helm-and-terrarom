@@ -4,67 +4,59 @@ trigger:
       - main
 
 pool:
-  name: 'Default'  # Your self-hosted or Microsoft-hosted agent
+  vmImage: 'ubuntu-latest'
 
 variables:
-  ACR_NAME: 'lanceoacr'
+  ACR_NAME: 'julienfacr'
   AKS_CLUSTER: 'aks-cluster'
   RESOURCE_GROUP: 'k8s-resource-group'
   IMAGE_NAME: 'my-app'
   IMAGE_TAG: '$(Build.BuildId)'
+  SERVICE_CONNECTION: 'Azure-Julien-ServiceConnection'
 
 steps:
-  - checkout: self
+- checkout: self
 
-  - task: PowerShell@2
-    displayName: 'Authenticate to Azure + ACR'
-    inputs:
-      targetType: 'inline'
-      script: |
-        Write-Host "🔐 Logging into Azure using System-Assigned Identity..."
-        try {
-          az login --identity --username 25a98eeb-6aec-406f-95e5-f3710e7d5cda
-          Write-Host "✅ Logged into Azure."
-        } catch {
-          Write-Host "❌ Azure login failed"
-          exit 1
-        }
+# ✅ Login to Azure using service connection
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: '$(SERVICE_CONNECTION)'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      echo "🔐 Logged into Azure with service connection."
+      az acr login --name $ACR_NAME
 
-        Write-Host "🔐 Logging into Azure Container Registry..."
-        try {
-          az acr login --name $(ACR_NAME)
-          Write-Host "✅ Logged into ACR."
-        } catch {
-          Write-Host "❌ ACR login failed"
-          exit 1
-        }
+# 🐳 Build and Push Docker image to ACR
+- task: Docker@2
+  displayName: 'Build and Push Docker Image'
+  inputs:
+    containerRegistry: '$(SERVICE_CONNECTION)'
+    repository: '$(IMAGE_NAME)'
+    command: 'buildAndPush'
+    Dockerfile: 'my-app/Dockerfile'
+    tags: |
+      $(IMAGE_TAG)
 
-  - task: PowerShell@2
-    displayName: 'Build & Push Docker Image'
-    inputs:
-      targetType: 'inline'
-      script: |
-        Write-Host "🐳 Building Docker image..."
-        docker build -t $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG) .
+# 🛠 Install Helm
+- task: HelmInstaller@1
+  displayName: 'Install Helm'
+  inputs:
+    helmVersionToInstall: 'latest'
 
-        Write-Host "🚀 Pushing Docker image to ACR..."
-        docker push $(ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
+# 🚀 Deploy to AKS using Helm
+- task: AzureCLI@2
+  displayName: 'Deploy to AKS with Helm'
+  inputs:
+    azureSubscription: '$(SERVICE_CONNECTION)'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      echo "🔑 Getting AKS credentials..."
+      az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER --overwrite-existing
 
-  - task: HelmInstaller@1
-    displayName: 'Install Helm'
-    inputs:
-      helmVersionToInstall: 'latest'
-
-  - task: PowerShell@2
-    displayName: 'Deploy to AKS via Helm'
-    inputs:
-      targetType: 'inline'
-      script: |
-        Write-Host "🔑 Fetching AKS credentials..."
-        az aks get-credentials --resource-group $(RESOURCE_GROUP) --name $(AKS_CLUSTER)
-
-        Write-Host "🚢 Deploying Helm chart..."
-        helm upgrade --install my-app ./my-app `
-          --set image.repository=$(ACR_NAME).azurecr.io/$(IMAGE_NAME) `
-          --set image.tag=$(IMAGE_TAG)
+      echo "🚢 Deploying with Helm..."
+      helm upgrade --install my-app ./my-app \
+        --set image.repository=$ACR_NAME.azurecr.io/$IMAGE_NAME \
+        --set image.tag=$IMAGE_TAG
 
