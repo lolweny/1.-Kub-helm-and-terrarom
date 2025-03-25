@@ -3,8 +3,9 @@ trigger:
     include:
       - main
 
+# 👇 Use your self-hosted agent pool (named "Default" by default)
 pool:
-  vmImage: 'ubuntu-latest'
+  name: 'Default'
 
 variables:
   ACR_NAME: 'julienfacr'
@@ -12,13 +13,13 @@ variables:
   RESOURCE_GROUP: 'k8s-resource-group'
   IMAGE_NAME: 'my-app'
   IMAGE_TAG: '$(Build.BuildId)'
-  AZURE_CONNECTION: 'Azure-Julien-ServiceConnection'   # Azure RM connection
-  ACR_CONNECTION: 'JulienACRConnection'                # Docker Registry connection
+  AZURE_CONNECTION: 'Azure-Julien-ServiceConnection'   # Azure Resource Manager
+  ACR_CONNECTION: 'JulienACRConnection'                # Docker Registry
 
 steps:
 - checkout: self
 
-# ✅ Login to Azure (optional if your ACR connection is configured correctly)
+# ✅ Login to Azure (optional but good for clarity)
 - task: AzureCLI@2
   displayName: 'Login to Azure'
   inputs:
@@ -26,7 +27,7 @@ steps:
     scriptType: 'bash'
     scriptLocation: 'inlineScript'
     inlineScript: |
-      echo "🔐 Logged into Azure..."
+      echo "🔐 Logging into Azure..."
       az acr login --name $ACR_NAME
 
 # 🐳 Build and Push Docker Image
