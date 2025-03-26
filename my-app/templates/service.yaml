@@ -8,8 +8,9 @@ spec:
   type: {{ .Values.service.type }}
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: http
+      targetPort: {{ .Values.service.port }}   # 🔥 Use actual port number (5000)
       protocol: TCP
       name: http
   selector:
     {{- include "my-app.selectorLabels" . | nindent 4 }}
+
