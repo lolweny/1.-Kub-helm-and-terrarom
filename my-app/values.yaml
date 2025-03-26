@@ -3,33 +3,28 @@ replicaCount: 2
 
 # Container image details
 image:
-  repository: nginx  # Change this to your own Docker image (e.g., mydockerhub/myapp)
-  tag: latest
+  repository: julienfacr.azurecr.io/my-app  # ✅ Updated to your ACR image
+  tag: latest                               # or use something like {{ .Chart.AppVersion }}
   pullPolicy: IfNotPresent
 
 # Kubernetes service configuration
 service:
-  type: LoadBalancer  # Exposes the app externally with a public IP
-  port: 80
+  type: LoadBalancer  # ✅ Keeps it publicly accessible
+  port: 5000          # ✅ Updated to match Flask app
 
 # Service account configuration
 serviceAccount:
-  create: true  # Ensure service account is created to avoid Helm error
+  create: true
   name: ""
 
-# Environment variables - Uses Kubernetes Secret for DB_PASSWORD
-env:
-  - name: DB_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: my-secret  # The Kubernetes Secret name
-        key: dbPassword  # The key inside the Secret
+# Environment variables (optional — you can add later if needed)
+env: []
 
 # Ingress (Disabled for now, but can be enabled later)
 ingress:
   enabled: false
 
-# Resource limits (optional, but recommended for production)
+# Resource limits
 resources:
   limits:
     cpu: 500m
@@ -38,14 +33,14 @@ resources:
     cpu: 250m
     memory: 256Mi
 
-# Autoscaling (Disabled for now, we will enable later)
+# Autoscaling (can be enabled later)
 autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 3
   targetCPUUtilizationPercentage: 50
 
-# Node Affinity (For advanced scheduling, leaving it empty for now)
+# Node scheduling
 nodeSelector: {}
 tolerations: []
 affinity: {}
