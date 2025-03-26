@@ -4,13 +4,13 @@ replicaCount: 2
 # Container image details
 image:
   repository: julienfacr.azurecr.io/my-app  # ✅ Updated to your ACR image
-  tag: latest                               # or use something like {{ .Chart.AppVersion }}
+  tag: "5"                                   # ✅ Match the tag built in pipeline
   pullPolicy: IfNotPresent
 
 # Kubernetes service configuration
 service:
   type: LoadBalancer  # ✅ Keeps it publicly accessible
-  port: 5000          # ✅ Updated to match Flask app
+  port: 5000          # ✅ Matches Flask app port
 
 # Service account configuration
 serviceAccount:
